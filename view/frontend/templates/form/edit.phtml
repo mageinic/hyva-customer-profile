@@ -1,0 +1,431 @@
+<?php
+/**
+ * MageINIC
+ * Copyright (C) 2023 MageINIC <support@mageinic.com>
+ *
+ * NOTICE OF LICENSE
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see https://opensource.org/licenses/gpl-3.0.html.
+ *
+ * Do not edit or add to this file if you wish to upgrade this extension to newer
+ * version in the future.
+ *
+ * @category MageINIC
+ * @package Hyva_MageINICCustomerProfile
+ * @copyright Copyright (c) 2023 MageINIC (https://www.mageinic.com/)
+ * @license https://opensource.org/licenses/gpl-3.0.html GNU General Public License,version 3 (GPL-3.0)
+ * @author MageINIC <support@mageinic.com>
+ */
+
+declare(strict_types=1);
+
+use Hyva\Theme\Model\ViewModelRegistry;
+use Hyva\Theme\ViewModel\HeroiconsSolid;
+use Hyva\Theme\ViewModel\ReCaptcha;
+use Magento\Customer\Block\Form\Edit as CustomerEdit;
+use Magento\Customer\Block\Widget\Name;
+use Magento\Framework\Escaper;
+use MageINIC\CustomerProfile\ViewModel\Profile;
+
+/** @var CustomerEdit $block */
+/** @var Escaper $escaper */
+/** @var ReCaptcha|null $recaptcha */
+/** @var HeroiconsSolid $heroicons */
+/** @var ViewModelRegistry $viewModels */
+
+$recaptcha = $block->getData('viewModelRecaptcha');
+$heroicons = $viewModels->require(HeroiconsSolid::class);
+$minimumPasswordLength = $block->getMinimumPasswordLength();
+$passwordMinCharacterSets = $block->getRequiredCharacterClassesNumber();
+
+$viewModel = $viewModels->require(Profile::class);
+
+$helper = $viewModel->getCustomerProfileHelper();
+$enable = $helper->getEnableModule();
+
+?>
+<form class="form form-edit-account"
+      action="<?= $escaper->escapeUrl($block->getUrl('customer/account/editPost')) ?>"
+      method="post" id="form-validate"
+      enctype="multipart/form-data"
+      x-data="Object.assign(hyva.formValidation($el), initForm())"
+      @submit.prevent="submitForm"
+      autocomplete="off">
+    <fieldset class="fieldset info">
+        <?= $block->getBlockHtml('formkey') ?>
+        <legend class="legend"><span><?= $escaper->escapeHtml(__('Account Information')) ?></span></legend>
+        <br>
+        <?= $block->getLayout()->createBlock(Name::class)->setObject($block->getCustomer())->toHtml() ?>
+        <?php if ($enable):
+            $avatarFile = !empty($block->getCustomer()->getCustomAttribute('profile_picture'))
+            && $viewModel->checkProfileImageFile(base64_encode(
+                $block->getCustomer()->getCustomAttribute('profile_picture')->getValue()
+            ));
+            $avatar = ($avatarFile) ? $block->getUrl(
+                'viewfile/profile/view/',
+                [
+                'image' => base64_encode(
+                    $block->getCustomer()->getCustomAttribute('profile_picture')->getValue()
+                )
+                ]
+            ) : $block->getViewFileUrl('MageINIC_CustomerProfile::images/no-profile-photo.jpg');
+            ?>
+        <div class="flex">
+            <div class="mb-4 p-4 text-sm w-40">
+                <div class="" x-data="previewImage()">
+                    <label for="logo">
+                        <?php if ($avatar): ?>
+                            <div class="w-full h-30 rounded bg-gray-100 border border-gray-200 flex
+                             items-center justify-center overflow-hidden">
+                                <img x-show="imageUrl" :src="imageUrl" class="w-full object-cover">
+                                <img x-show="!imageUrl" src="<?= $escaper->escapeHtml($avatar) ?>"
+                                     class="w-full object-cover profile">
+                            </div>
+                        <?php else: ?>
+                            <div class="w-full h-30 rounded bg-gray-100 border border-gray-200 flex
+                             items-center justify-center overflow-hidden">
+                                <img x-show="imageUrl" :src="imageUrl" class="w-full object-cover">
+                                <div x-show="!imageUrl" class="text-gray-300 flex flex-col items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 " fill="none"
+                                         viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0
+                                               011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    <div>Image Preview</div>
+                                </div>
+                            </div>
+                        <?php endif;?>
+                    </label>
+                    <div>
+                        <label for="profile_picture" class="block mb-2 mt-4 font-bold">Upload image..</label>
+                        <input class="w-full cursor-pointer" type="file" name="profile_picture" id="profile_picture"
+                               @change="fileChosen" accept=".png, .jpg, .jpeg">
+                        <div x-show="invalidFile" class="text-red-500 text-sm mt-2">
+                            Invalid file type. Please choose a valid image file.</div>
+                        <input class="customer_id" type="hidden"
+                               value="<?= $escaper->escapeHtmlAttr($block->getCustomer()->getId()) ?>"/>
+                        <input class="no_profile" type="hidden"
+                               value="<?= $escaper->escapeHtmlAttr($block->getViewFileUrl(
+                                   'MageINIC_CustomerProfile::images/no-profile-photo.jpg'
+                               )) ?>"
+                               name="no_profile"
+                        />
+                    </div>
+                    <span class="remove-image"
+                          @click.prevent="removeImage(<?= (int)$block->getCustomer()->getId() ?>)">X Remove
+                    </span>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php $dob = $block->getLayout()->createBlock(\Magento\Customer\Block\Widget\Dob::class) ?>
+        <?php $taxvat = $block->getLayout()->createBlock(\Magento\Customer\Block\Widget\Taxvat::class) ?>
+        <?php $gender = $block->getLayout()->createBlock(\Magento\Customer\Block\Widget\Gender::class) ?>
+        <?php if ($dob->isEnabled()): ?>
+            <?= $dob->setDate($block->getCustomer()->getDob())->toHtml() ?>
+        <?php endif ?>
+        <?php if ($taxvat->isEnabled()): ?>
+            <?= $taxvat->setTaxvat($block->getCustomer()->getTaxvat())->toHtml() ?>
+        <?php endif ?>
+        <?php if ($gender->isEnabled()): ?>
+            <?= $gender->setGender($block->getCustomer()->getGender())->toHtml() ?>
+        <?php endif ?>
+        <div class="field choice">
+            <input
+                type="checkbox"
+                name="change_email"
+                id="change-email"
+                value="1"
+                title="<?= $escaper->escapeHtmlAttr(__('Change Email')) ?>"
+                @change="handleCheckboxChange('email-fields')"
+                class="checkbox"
+                aria-describedby="change_email_description"
+            />
+            <label class="label" for="change-email">
+                <span>
+                    <?= $escaper->escapeHtml(__('Change Email')) ?>
+                </span>
+            </label>
+            <span class="sr-only" id="change_email_description"><?= $escaper->escapeHtml(
+                __('form appears when field is selected')
+            ) ?>
+            </span>
+        </div>
+        <div class="field choice">
+            <input
+                type="checkbox"
+                name="change_password"
+                id="change-password"
+                value="1"
+                title="<?= $escaper->escapeHtmlAttr(__('Change Password')) ?>"
+                @change="handleCheckboxChange('password-fields')"
+                <?php if ($block->getChangePassword()): ?> checked="checked"<?php endif; ?>
+                class="checkbox"
+                aria-describedby="change_password_description"
+            />
+            <label class="label" for="change-password">
+                <span>
+                    <?= $escaper->escapeHtml(__('Change Password')) ?>
+                </span>
+            </label>
+            <span class="sr-only" id="change_password_description"><?= $escaper->escapeHtml(
+                __('form appears when field is selected')
+            ) ?></span>
+        </div>
+        <template x-if="showEmailField">
+            <div class="field field-reserved email required" id="email-fields">
+                <label class="label" for="email"><span><?= $escaper->escapeHtml(__('Email')) ?></span></label>
+                <div class="control">
+                    <input type="email" name="email" id="email" autocomplete="email" required
+                           value="<?= $escaper->escapeHtmlAttr($block->getCustomer()->getEmail()) ?>"
+                           title="<?= $escaper->escapeHtmlAttr(__('Email')) ?>"
+                           class="form-input"/>
+                </div>
+            </div>
+        </template>
+        <template x-if="showEmailField || showPasswordFields">
+            <div
+                class="field field-reserved password current required"
+                id="password-fields">
+                <label class="label" for="current-password">
+                    <span><?= $escaper->escapeHtml(__('Current Password')) ?></span>
+                </label>
+                <div class="control flex items-center">
+                    <input :type="showPasswordCurrent ? 'text' : 'password'" type="password" class="form-input"
+                           name="current_password" id="current-password"
+                           data-input="current-password"
+                           required
+                           autocomplete="off"
+                           aria-describedby="password-strength-meter"
+                    />
+                    <button
+                        type="button"
+                        @click="showPasswordCurrent = !showPasswordCurrent"
+                        class="px-4 self-stretch"
+                        :aria-label="showPasswordCurrent ? '<?= $escaper->escapeJs(
+                            __('Hide Password')
+                        ) ?>' : '<?= $escaper->escapeJs(__('Show Password')) ?>'">
+                        <template x-if="!showPasswordCurrent">
+                            <?= $heroicons->eyeHtml('w-5 h-5'); ?>
+                        </template>
+                        <template x-if="showPasswordCurrent">
+                            <?= $heroicons->eyeOffHtml('w-5 h-5'); ?>
+                        </template>
+                    </button>
+                </div>
+            </div>
+        </template>
+        <template x-if="showPasswordFields">
+            <div>
+                <div class="field field-reserved">
+                    <label class="label" for="password"><span>
+                            <?= $escaper->escapeHtml(__('New Password')) ?>
+                    </span></label>
+                    <div class="control flex items-center">
+                        <input :type="showPasswordNew ? 'text' : 'password'"
+                               type="password" class="form-input" name="password" id="password" required
+                               data-validate='{
+                               "password-strength": {"minCharacterSets": <?= (int) $passwordMinCharacterSets ?>}}'
+                               @input="onChange"
+                               minlength="<?= $escaper->escapeHtmlAttr($minimumPasswordLength) ?>" autocomplete="off"
+                               aria-describedby="password-strength-meter"/>
+                        <button
+                            type="button" @click="showPasswordNew = !showPasswordNew" class="px-4 self-stretch"
+                            :aria-label="showPasswordNew ? '<?= $escaper->escapeJs(
+                                __('Hide Password')
+                            ) ?>' :
+                                 '<?= $escaper->escapeJs(__('Show Password')) ?>'">
+                            <template x-if="!showPasswordNew">
+                                <?= $heroicons->eyeHtml('w-5 h-5'); ?>
+                            </template>
+                            <template x-if="showPasswordNew">
+                                <?= $heroicons->eyeOffHtml('w-5 h-5'); ?>
+                            </template>
+                        </button>
+                        <div id="password-strength-meter-container" data-role="password-strength-meter"
+                             aria-live="polite">
+                            <div id="password-strength-meter" class="password-strength-meter">
+                                <?= $escaper->escapeHtml(__('Password Strength')) ?>:
+                                <span id="password-strength-meter-label" data-role="password-strength-meter-label">
+                                    <?= $escaper->escapeHtml(__('No Password')) ?>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="field field-reserved">
+                    <label class="label" for="password-confirmation">
+                        <span><?= $escaper->escapeHtml(__('Confirm New Password')) ?></span>
+                    </label>
+                    <div class="control flex items-center">
+                        <input :type="showPasswordConfirm ? 'text' : 'password'" type="password" class="form-input"
+                               name="password_confirmation" id="password-confirmation"
+                               data-validate='{"equalTo": "password"}'
+                               @input="onChange"
+                               autocomplete="off"
+                               aria-describedby="password-strength-meter"
+                        />
+                        <button
+                            type="button"
+                            @click="showPasswordConfirm = !showPasswordConfirm"
+                            class="px-4 self-stretch"
+                            :aria-label="showPasswordConfirm ? '<?= $escaper->escapeJs(
+                                __('Hide Password')
+                            ) ?>'
+                                : '<?= $escaper->escapeJs(__('Show Password')) ?>'">
+                            <template x-if="!showPasswordConfirm">
+                                <?= $heroicons->eyeHtml('w-5 h-5'); ?>
+                            </template>
+                            <template x-if="showPasswordConfirm">
+                                <?= $heroicons->eyeOffHtml('w-5 h-5'); ?>
+                            </template>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </fieldset>
+    <?= $block->getChildHtml('form_additional_info') ?>
+    <?= $recaptcha ? $recaptcha->getInputHtml(ReCaptcha::RECAPTCHA_FORM_ID_CUSTOMER_EDIT) : '' ?>
+    <div class="actions-toolbar">
+        <div class="primary">
+            <button type="submit" class="action save primary" title="<?= $escaper->escapeHtmlAttr(
+                __('Save')
+            ) ?>">
+                <span>
+                    <?= $escaper->escapeHtml(__('Save')) ?>
+                </span>
+            </button>
+        </div>
+        <div class="secondary">
+            <a class="action back" href="<?= $escaper->escapeUrl($block->getBackUrl()) ?>">
+                <span>
+                    <?= $escaper->escapeHtml(__('Go back')) ?>
+                </span>
+            </a>
+        </div>
+    </div>
+</form>
+<div class="w-full">
+    <?= $recaptcha ? $recaptcha->getLegalNoticeHtml(ReCaptcha::RECAPTCHA_FORM_ID_CUSTOMER_EDIT) : '' ?>
+</div>
+<script>
+    function initForm() {
+        return {
+            errors: 0,
+            hasCaptchaToken: 0,
+            displayErrorMessage: false,
+            errorMessages: [],
+            showEmailField: false,
+            showPasswordNew: false,
+            showPasswordConfirm: false,
+            showPasswordCurrent: false,
+            showPasswordFields: <?= $block->getChangePassword() ?
+                $escaper->escapeJs('true') : $escaper->escapeJs('false') ?>,
+            setErrorMessages(messages) {
+                this.errorMessages = [messages]
+                this.displayErrorMessage = this.errorMessages.length
+            },
+            submitForm() {
+                this.validate()
+                    .then(() => {
+                        const $form = document.querySelector('#form-validate');
+                        <?= $recaptcha ? $recaptcha->getValidationJsHtml(
+                            ReCaptcha::RECAPTCHA_FORM_ID_CUSTOMER_EDIT
+                        ) : ''
+                                ?>
+                        if (this.errors === 0) {
+                            $form.submit();
+                        }
+                    })
+                    .catch((invalid) => {
+                        if (invalid.length > 0) {
+                            invalid[0].focus();
+                        }
+                    })
+            },
+            handleCheckboxChange(checkboxId) {
+                if(checkboxId === 'email-fields') {
+                    this.showEmailField = !this.showEmailField
+                }
+                if(checkboxId ==='password-fields') {
+                    this.showPasswordFields = !this.showPasswordFields
+                }
+                this.$nextTick(() => {
+                    const firstFocusableElement = document.querySelector(`
+                        #${checkboxId} input,
+                        #${checkboxId} textarea,
+                        #${checkboxId} select
+                    `)
+                    firstFocusableElement && firstFocusableElement.focus()
+                })
+            }
+        }
+    }
+</script>
+<script>
+    function previewImage() {
+        return {
+            imageUrl: null,
+            orders: null,
+            isLoading: false,
+            invalidFile: false,
+            allowedExtensions: ["jpg", "jpeg", "png"],
+            fileChosen(event) {
+                const file = event.target.files[0];
+                this.invalidFile = this.isInvalidExtension(file);
+                if (!this.invalidFile) {
+                    this.fileToDataUrl(file, (src) => (this.imageUrl = src));
+
+                } else {
+                    this.imageUrl = null;
+                }
+            },
+            fileToDataUrl(file, callback) {
+                if (!file) return;
+                let reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (e) => callback(e.target.result);
+            },
+            removeImage(customerId) {
+                let no_profile = document.getElementsByClassName("no_profile")[0].value;
+                let profileImage = document.querySelector('.profile');
+                profileImage.src = no_profile;
+                this.isLoading = true;
+                const fileExtension = this.getFileExtension(profileImage.src);
+                if (!this.allowedExtensions.includes(fileExtension.toLowerCase())) {
+                    this.invalidFile = true;
+                    return;
+                }
+                const formKey = hyva.getFormKey();
+                const postUrl = BASE_URL + 'viewfile/profile/delete';
+                fetch(postUrl, {
+                    "headers": {
+                        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    },
+                    "body": "form_key=" + formKey + "&customerid=" + customerId + "&uenc=" + hyva.getUenc(),
+                    "method": "POST",
+                    "mode": "cors",
+                    "credentials": "include"
+                }).then(
+                    (response) => response.json()
+                ).catch(response => console.log(JSON.stringify(response)))
+            },
+            isInvalidExtension(file) {
+                if (!file) return false;
+                const extension = this.getFileExtension(file.name).toLowerCase();
+                return !this.allowedExtensions.includes(extension);
+            },
+            getFileExtension(fileName) {
+                return fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2);
+            },
+        };
+    }
+</script>
